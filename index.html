@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Office Runner – Stern auf dem Weihnachtsbaum</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #f0f0f0; font-family: Arial, sans-serif; }
+        canvas { display: block; }
+        #instructions {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(255,255,255,0.7); padding: 10px; border-radius: 5px;
+        }
+        #successMessage {
+            display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 2rem; color: green; text-align: center; font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="instructions">
+        Drücke die Leertaste, um zu springen.<br>
+        Ziel: Platziere den Stern an der Spitze des Weihnachtsbaumes!
+    </div>
+    <div id="successMessage">Herzlichen Glückwunsch! Stern erfolgreich platziert!</div>
+    <audio id="music" loop autoplay>
+        <source src="background_music.mp3" type="audio/mpeg">
+    </audio>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const successMessage = document.getElementById('successMessage');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Bildressourcen
+        const background = new Image(); background.src = 'background.png';
+        const playerImage = new Image(); playerImage.src = 'Beraterin_mit_Stern.png';
+        const treeImage = new Image(); treeImage.src = 'weihnachtsbaum.png';
+        const obstaclesImages = [
+            'broken pc.png', 'sleeping collague.png', 'flip chart.png', 'spilled coffee.png', 'angry client.png'
+        ].map(src => { const img = new Image(); img.src = src; return img; });
+
+        // Dynamische Skalierung
+        const playerHeight = canvas.height * 0.4; // 40 % der Bildschirmhöhe
+        const playerWidth = playerHeight * 2 / 3; // Seitenverhältnis beibehalten
+        const obstacleHeight = canvas.height * 0.33; // 33 % der Bildschirmhöhe
+        const obstacleWidth = obstacleHeight; // Quadratisch
+        const treeHeight = canvas.height * 0.4; // 40 % der Bildschirmhöhe
+        const treeWidth = treeHeight / 1.5; // Seitenverhältnis des Weihnachtsbaumes
+
+        const player = {
+            x: canvas.width / 10,
+            y: canvas.height - playerHeight - 30,
+            width: playerWidth,
+            height: playerHeight,
+            yVelocity: 0,
+            jumping: false
+        };
+
+        // Optimierter Hindernispool
+        const obstaclePool = []; for (let i = 0; i < 5; i++) {
+            obstaclePool.push({
+            x: canvas.width + i * 600, // Gleichmäßige Abstände von 600px
+            y: canvas.height - obstacleHeight - 30,
+            width: obstacleWidth,
+            height: obstacleHeight,
+            image: obstaclesImages[i % obstaclesImages.length]
+        }));
+
+        const tree = {
+            x: canvas.width + 600 * 5, // Der Weihnachtsbaum kommt als letztes Hindernis
+            y: canvas.height - treeHeight - 30,
+            width: treeWidth,
+            height: treeHeight,
+            reached: false // Zustand hinzufügen, um mehrfache Resets zu vermeiden
+        };
+
+        let gameSpeed = 4;
+        let gravity = 1.2; // Reduzierte Schwerkraft für längeren Sprung
+        let jumpStrength = 45; // Sprunghöhe
+        let score = 0;
+        let gameOver = false;
+
+        function drawBackground() {
+            ctx.drawImage(background, 0, 0, canvas.width, canvas.height);
+        }
+
+        function drawPlayer() {
+            ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
+        }
+
+        function drawObstacles() {
+            for (let i = 0; i < obstaclePool.length; i++) {
+                const obs = obstaclePool[i];
+                ctx.drawImage(obs.image, obs.x, obs.y, obs.width, obs.height);
+            });
+        }
+
+        function drawTree() {
+            ctx.drawImage(treeImage, tree.x, tree.y, tree.width, tree.height);
+        }
+
+        function updateObstacles() {
+            obstaclePool.forEach(obs => {
+                obs.x -= gameSpeed;
+
+                // Zurücksetzen, wenn das Hindernis den Bildschirm verlässt
+                if (obs.x + obs.width < 0) {
+                    obstaclePool.splice(i, 1);
+                    i--; // Passe Index an, um Hindernisse zu entfernen
+                }
+            });
+
+            // Weihnachtsbaum bewegen und Zustand berücksichtigen
+            if (!tree.reached) {
+                tree.x -= gameSpeed;
+                if (tree.x + tree.width < 0) {
+                    tree.x = canvas.width + 600; // Reset-Position des Baumes
+                }
+            }
+        }
+
+        function checkCollision() {
+            obstaclePool.forEach(obs => {
+                if (player.x < obs.x + obs.width &&
+                    player.x + player.width > obs.x &&
+                    player.y < obs.y + obs.height &&
+                    player.y + player.height > obs.y) {
+                    gameSpeed = 2; // Verlangsamung bei Kollision
+                    setTimeout(() => gameSpeed = 4, 500);
+                }
+            });
+
+            // Prüfe, ob der Spieler den Weihnachtsbaum erreicht hat
+            if (player.x + player.width > tree.x && player.y <= tree.y + tree.height) {
+                successMessage.style.display = 'block';
+                tree.reached = true; // Zustand setzen, um weiteren Reset zu verhindern
+                gameOver = true;
+            }
+        }
+
+        function updatePlayer() {
+            if (player.jumping) {
+                player.yVelocity += gravity;
+                player.y += player.yVelocity;
+                if (player.y >= canvas.height - player.height - 30) {
+                    player.y = canvas.height - player.height - 30;
+                    player.jumping = false;
+                }
+            }
+        }
+
+        function drawScore() {
+            ctx.fillStyle = 'black';
+            ctx.font = '20px Arial';
+            ctx.fillText('Punkte: ' + score, 10, 30);
+        }
+
+        function gameLoop() {
+            if (gameOver) return;
+
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBackground();
+            drawTree();
+            drawPlayer();
+            drawObstacles();
+            drawScore();
+            ctx.restore();
+
+            updatePlayer();
+            updateObstacles();
+            checkCollision();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.code === 'Space' && !player.jumping) {
+                player.jumping = true;
+                player.yVelocity = -jumpStrength;
+            }
+        });
+
+        gameLoop();
+    </script>
+</body>
+</html>
